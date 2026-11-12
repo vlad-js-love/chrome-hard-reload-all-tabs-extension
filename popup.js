@@ -65,6 +65,115 @@ presetBtns.forEach(b => {
   });
 });
 
+// ── Excluded sites ────────────────────────────────
+const exclHeader = document.getElementById("exclHeader");
+const exclPanel  = document.getElementById("exclPanel");
+const exclForm   = document.getElementById("exclForm");
+const exclInput  = document.getElementById("exclInput");
+const exclList   = document.getElementById("exclList");
+const exclCount  = document.getElementById("exclCount");
+
+let exclusions = loadExclusions();
+
+function loadExclusions() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("exclusions") || "[]");
+    return Array.isArray(saved) ? saved : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveExclusions() {
+  localStorage.setItem("exclusions", JSON.stringify(exclusions));
+}
+
+function matchesPattern(url, pattern) {
+  url = url.toLowerCase();
+  pattern = pattern.toLowerCase();
+  if (pattern.includes("://")) return url.startsWith(pattern);
+
+  // No scheme → domain (+ optional path), subdomains included
+  try {
+    const { host, pathname, search } = new URL(url);
+    const slash = pattern.indexOf("/");
+    const pHost = slash < 0 ? pattern : pattern.slice(0, slash);
+    const pPath = slash < 0 ? "" : pattern.slice(slash);
+    return (host === pHost || host.endsWith("." + pHost)) && (pathname + search).startsWith(pPath);
+  } catch (_) {
+    return false;
+  }
+}
+
+function isExcluded(tab) {
+  return [tab.url, tab.pendingUrl].some(url => url && exclusions.some(p => matchesPattern(url, p)));
+}
+
+function renderExclusions() {
+  exclCount.textContent = exclusions.length;
+  exclList.replaceChildren();
+
+  if (!exclusions.length) {
+    const empty = document.createElement("li");
+    empty.className = "excl-empty";
+    empty.textContent = "URL prefix (https://site.com/) or domain (site.com)";
+    exclList.append(empty);
+    return;
+  }
+
+  exclusions.forEach((pattern, i) => {
+    const item = document.createElement("li");
+    item.className = "excl-item";
+
+    const text = document.createElement("span");
+    text.className = "excl-url";
+    text.textContent = pattern;
+    text.title = pattern;
+
+    const remove = document.createElement("button");
+    remove.className = "excl-remove";
+    remove.title = "Remove";
+    remove.textContent = "×";
+    remove.addEventListener("click", () => {
+      exclusions.splice(i, 1);
+      saveExclusions();
+      renderExclusions();
+    });
+
+    item.append(text, remove);
+    exclList.append(item);
+  });
+}
+
+(function initExclusions() {
+  const open = localStorage.getItem("exclOpen") === "true";
+  exclPanel.classList.toggle("visible", open);
+  exclHeader.classList.toggle("open", open);
+  renderExclusions();
+})();
+
+exclHeader.addEventListener("click", () => {
+  const open = exclPanel.classList.toggle("visible");
+  exclHeader.classList.toggle("open", open);
+  localStorage.setItem("exclOpen", open);
+  if (open) exclInput.focus();
+});
+
+// Several entries can be pasted at once, separated by spaces, commas or new lines
+exclForm.addEventListener("submit", e => {
+  e.preventDefault();
+  const added = [...new Set(exclInput.value.split(/[\s,]+/))]
+    .filter(p => p && !exclusions.includes(p));
+
+  exclInput.value = "";
+  if (!added.length) return;
+
+  exclusions.push(...added);
+  saveExclusions();
+  renderExclusions();
+  exclList.scrollTop = exclList.scrollHeight;
+});
+
 function setStatus(text, state) {
   status.textContent = text;
   status.className = state;
@@ -104,7 +213,9 @@ btn.addEventListener("click", async () => {
   setProgress(null);
 
   try {
-    const tabs = await chrome.tabs.query({});
+    const allTabs = await chrome.tabs.query({});
+    const tabs = allTabs.filter(tab => !isExcluded(tab));
+    const skipped = allTabs.length - tabs.length;
     const total = tabs.length;
     const delay = getDelay();
     let done = 0;
@@ -132,8 +243,12 @@ btn.addEventListener("click", async () => {
       );
     }
 
+    setProgress(100);
     lastCountEl.textContent = total;
-    setStatus(`✓ Hard reloaded ${total} tab${total !== 1 ? "s" : ""}`, "success");
+    setStatus(
+      `✓ Hard reloaded ${total} tab${total !== 1 ? "s" : ""}` + (skipped ? ` · ${skipped} skipped` : ""),
+      "success"
+    );
     btn.style.animation = "flash-success 0.8s ease forwards";
     setTimeout(() => { btn.style.animation = ""; }, 800);
   } catch (err) {

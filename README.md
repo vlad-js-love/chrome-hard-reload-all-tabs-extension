@@ -11,6 +11,10 @@ A minimal Chrome extension that hard-reloads (bypasses cache) every open tab wit
 - **Progress bar** — tracks reload progress in real time
 - **Sequential delay mode** — reload tabs one by one with a configurable pause (50 ms – 1 s) to avoid hammering your network or CPU
   - Delay value and toggle state are persisted between sessions
+- **Excluded sites** — an unlimited list of URLs/domains that are never reloaded
+  - `https://www.youtube.com/` — skips every tab whose URL starts with this prefix
+  - `youtube.com` — skips the domain and all its subdomains (`www.`, `music.`, …)
+  - Paste several entries at once, separated by spaces, commas or new lines
 - **Non-intrusive** — system pages like `chrome://` are silently skipped without errors
 
 ---
@@ -66,7 +70,6 @@ chrome_extention_all_reload/
 ## Options (planned)
 
 - Reload only the active window
-- Domain/URL exclusion list
 - Reload only pinned / only unpinned tabs
 - Keyboard shortcut support
 - Auto-reload on a timer
